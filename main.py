@@ -111,12 +111,32 @@ def openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, client):
 
     return texto_para_imagem
 
+def openai_dalle_gerar_imagem(resolucao, resumo_para_imagem, nome_arquivo, client, quantidade=1):
+    """Gera uma imagem com base no texto fornecido."""
+    print("Gerando imagem com o DALL-E...")
+
+    prompt_user = "Uma pintura ultra futurista, textless, de um cenário tecnológico com elementos de computação e tecnologia. A imagem deve ser quadrada e ter uma resolução de 1024x1024." + resumo_para_imagem
+    
+    resposta = client.images.generate(
+        model="dall-e-3",
+        prompt=prompt_user,
+        n=quantidade,
+        size=resolucao
+    )
+
+    # Corrigindo o acesso ao atributo correto
+    url_imagem = resposta.data[0].url
+    print(f"Imagem gerada! URL: {url_imagem}")
+
+    return url_imagem
+
 def main():
     """Executa todo o fluxo de transcrição, resumo e geração de texto para imagens."""
     load_dotenv()
     
     caminho_audio = "podcasts/hipsters_154_testes_short.mp3"
     nome_arquivo = "hipsters_154_testes_short"
+    resolucao = "1024x1024"
     
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
@@ -126,6 +146,8 @@ def main():
     transcricao_completa = openai_whisper_transcrever(caminho_audio, nome_arquivo, modelo_whisper, client)
     resumo_instagram = openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client)
     texto_para_imagem = openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, client)
+    resumo_imagem_instagram = ferramenta_ler_arquivo(f"texto_para_geracao_imagem_{nome_arquivo}.txt")
 
+    imagem_gerada = openai_dalle_gerar_imagem(resolucao,resumo_imagem_instagram,nome_arquivo,client)
 if __name__ == "__main__":
     main()
