@@ -1,8 +1,10 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
+from PIL import Image
 import requests
-
+from instabot import Bot
+import shutil
 # Criar diretórios se não existirem
 PASTAS = {
     "transcricoes": "transcricoes",
@@ -61,12 +63,16 @@ def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
 
     print("Resumindo com o GPT...")
     prompt_sistema = """
-    Assuma que você é um digital influencer da área de tecnologia criando conteúdos para um podcast.
+    Assuma que você é um digital influencer criando conteúdos.
     - Use gênero neutro
-    - Convide para ouvir o podcast
+    - Faça um explicação detalhada e envolvente
     - Texto em português do Brasil
+    - Use linguagem informal
+    - Seja criativo e autêntico
+    - Escreva como se fosse uma matéria de jornal ou revista
+    - Escreva as hashtags que você usaria
     """
-    prompt_usuario = f'Reescreva como uma legenda chamativa para Instagram: "{transcricao_completa}".'
+    prompt_usuario = f'Reescreva como um texto de materia: "{transcricao_completa}".'
 
     resposta = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -90,13 +96,13 @@ def openai_dalle_gerar_imagem(resumo_para_imagem, nome_arquivo, client, quantida
         return caminhos_imagens
 
     print("Gerando imagens com DALL-E...")
-    prompt_user = f"Uma pintura futurista e misteriosa, textless, 3D que retrate: {resumo_para_imagem}."
+    prompt_user = f"Uma pintura futurista e misteriosa, sem texto, 3D que retrate: {resumo_para_imagem}."
 
     imagens_geradas = [client.images.generate(
-        model="dall-e-3",
+        model="dall-e-2",
         prompt=prompt_user,
         n=1,
-        size="1024x1024"
+        size="256x256"
     ).data[0].url for _ in range(quantidade)]
 
     for i, url in enumerate(imagens_geradas):
@@ -106,17 +112,67 @@ def openai_dalle_gerar_imagem(resumo_para_imagem, nome_arquivo, client, quantida
 
     return caminhos_imagens
 
+def selecionar_imagem(lista_nome_imagens):
+    """Permite que a pessoa usuária selecione uma imagem da lista gerada."""
+    print("Imagens geradas:")
+    for i, nome_imagem in enumerate(lista_nome_imagens):
+        print(f"{i}: {nome_imagem}")
+
+    escolha = int(input("Qual imagem você deseja selecionar? Informe o número do sufixo da imagem gerada: "))
+    return lista_nome_imagens[escolha]
+
+def ferramenta_converter_png_para_jpg(caminho_imagem_escolhida, nome_arquivo):
+    """Converte uma imagem PNG para JPG."""
+    img_png = Image.open(caminho_imagem_escolhida)
+    caminho_jpg = caminho_imagem_escolhida.split(".")[0] + ".jpg"
+    img_png.save(caminho_jpg, "JPEG")
+    return caminho_jpg
+
+def postar_instagram(caminho_imagem, texto, user, password):
+    if os.path.exists("config"):
+        shutil.rmtree("config")
+    bot = Bot()
+    
+    bot.login(username=user, password=password)
+
+    resposta = bot.upload_photo(caminho_imagem, caption=texto)
+
+def confirmacao_postagem(caminho_imagem_convertida, Legenda_postagem):
+    print("f\nCaminho Imagem: (caminho_imagem_convertida}") 
+    print(f"\Legenda: {Legenda_postagem}") 
+    
+    print("\n\nDeseja postar os dados acima no seu instagram? Digite 's' para sim e 'n' para não.")
+    return input()
+
+
+def ferramenta_conversao_binario_para_string(texto):
+    if isinstance(texto, bytes):
+        return str(texto.decode())
+    return texto
+
 def main():
     """Executa todo o fluxo de transcrição, resumo e geração de imagem."""
     load_dotenv()
-    caminho_audio = "podcasts/hipsters_154_testes_short.mp3"
-    nome_arquivo = "hipsters_154_testes_short"
+    caminho_audio = "podcasts/operacaoprato.mp3"
+    nome_arquivo = "operacaoprato"
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
+    usuario_instagram = os.getenv("USER_INSTAGRAM")
+    senha_instagram = os.getenv("PASSWORD_INSTAGRAM")
 
     transcricao = openai_whisper_transcrever(caminho_audio, nome_arquivo, "whisper-1", client)
     resumo = openai_gpt_resumir_texto(transcricao, nome_arquivo, client)
-    openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 4)
+    # openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
+    lista_imagens_geradas = openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
 
+    caminho_imagem_escolhida = selecionar_imagem(lista_imagens_geradas)
+    caminho_imagem_convertida = ferramenta_converter_png_para_jpg(caminho_imagem_escolhida, nome_arquivo)
+    print(f"Imagem selecionada: {caminho_imagem_escolhida}")
+    print(f"Imagem convertida para JPG: {caminho_imagem_convertida}")
+    print(f"Usuário: {os.getenv('USER_INSTAGRAM')}")
+    print(f"Senha: {os.getenv('PASSWORD_INSTAGRAM')}")
+    if confirmacao_postagem(caminho_imagem_convertida,ferramenta_conversao_binario_para_string(resumo)).lower() == "s":
+        print("Postando no Instagram...")
+        postar_instagram(caminho_imagem_convertida, f"{ferramenta_conversao_binario_para_string(resumo)}", usuario_instagram, senha_instagram)
 if __name__ == "__main__":
     main()
