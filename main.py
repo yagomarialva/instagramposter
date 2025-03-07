@@ -1,65 +1,72 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
+import requests
 
-def ferramenta_ler_arquivo(nome_arquivo):
+# Criar diretórios se não existirem
+PASTAS = {
+    "transcricoes": "transcricoes",
+    "resumos": "resumos_instagram",
+    "imagens": "imagens"
+}
+
+for pasta in PASTAS.values():
+    os.makedirs(pasta, exist_ok=True)
+
+def ferramenta_ler_arquivo(caminho_arquivo):
     """Lê o conteúdo de um arquivo de texto se ele existir."""
     try:
-        with open(nome_arquivo, "r", encoding="utf-8") as arquivo:
+        with open(caminho_arquivo, "r", encoding="utf-8") as arquivo:
             return arquivo.read()
     except FileNotFoundError:
-        print(f"Arquivo {nome_arquivo} não encontrado. Criando um novo...")
         return None
     except IOError as e:
-        print(f"Erro ao carregar o arquivo {nome_arquivo}: {e}")
+        print(f"Erro ao carregar o arquivo {caminho_arquivo}: {e}")
         return None
+
+def ferramenta_salvar_arquivo(caminho_arquivo, conteudo):
+    """Salva conteúdo em um arquivo de texto."""
+    try:
+        with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
+            arquivo.write(conteudo)
+    except IOError as e:
+        print(f"Erro ao salvar o arquivo {caminho_arquivo}: {e}")
 
 def openai_whisper_transcrever(caminho_audio, nome_arquivo, modelo_whisper, client):
     """Transcreve um arquivo de áudio usando Whisper da OpenAI, caso a transcrição ainda não exista."""
-    nome_arquivo_txt = f"texto_completo_{nome_arquivo}.txt"
+    caminho_arquivo_txt = os.path.join(PASTAS["transcricoes"], f"texto_completo_{nome_arquivo}.txt")
 
-    transcricao_existente = ferramenta_ler_arquivo(nome_arquivo_txt)
-    if transcricao_existente:
-        print("Arquivo de transcrição encontrado. Pulando a transcrição...")
-        return transcricao_existente
-
+    if transcricao := ferramenta_ler_arquivo(caminho_arquivo_txt):
+        print("Transcrição já existe. Pulando a transcrição...")
+        return transcricao
+    
     print("Transcrevendo o áudio com o OpenAI...")
-
     with open(caminho_audio, "rb") as audio:
-        response = client.audio.transcribe(
+        response = client.audio.transcriptions.create(
             model=modelo_whisper,
             file=audio
         )
     
     transcricao_completa = response.text.strip()
-
-    with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_texto:
-        arquivo_texto.write(transcricao_completa)
-
+    ferramenta_salvar_arquivo(caminho_arquivo_txt, transcricao_completa)
     return transcricao_completa
 
 def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
     """Gera um resumo da transcrição para um post no Instagram, caso ainda não exista."""
-    nome_resumo_txt = f"resumo_instagram_{nome_arquivo}.txt"
+    caminho_resumo_txt = os.path.join(PASTAS["resumos"], f"resumo_instagram_{nome_arquivo}.txt")
 
-    resumo_existente = ferramenta_ler_arquivo(nome_resumo_txt)
-    if resumo_existente:
-        print("Arquivo de resumo encontrado. Pulando a geração do resumo...")
-        return resumo_existente
+    if resumo := ferramenta_ler_arquivo(caminho_resumo_txt):
+        print("Resumo já existe. Pulando a geração...")
+        return resumo
 
-    print("Resumindo com o GPT para um post do Instagram...")
-
+    print("Resumindo com o GPT...")
     prompt_sistema = """
-    Assuma que você é um digital influencer da área de tecnologia e que está criando conteúdos para um podcast.
-
-    Os textos devem considerar:
-    - Seguidores são entusiastas de tecnologia e computação.
-    - Uso do gênero neutro.
-    - Texto deve ser um convite para ouvir o podcast no Instagram.
-    - Texto em português do Brasil.
+    Assuma que você é um digital influencer da área de tecnologia criando conteúdos para um podcast.
+    - Use gênero neutro
+    - Convide para ouvir o podcast
+    - Texto em português do Brasil
     """
-
-    prompt_usuario = f'Aqui está uma transcrição: "{transcricao_completa}". Por favor, reescreva como uma legenda chamativa para o Instagram, incluindo hashtags.'
+    prompt_usuario = f'Reescreva como uma legenda chamativa para Instagram: "{transcricao_completa}".'
 
     resposta = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -71,83 +78,45 @@ def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
     )
 
     resumo_instagram = resposta.choices[0].message.content.strip()
-
-    with open(nome_resumo_txt, "w", encoding="utf-8") as arquivo_texto:
-        arquivo_texto.write(resumo_instagram)
-
+    ferramenta_salvar_arquivo(caminho_resumo_txt, resumo_instagram)
     return resumo_instagram
 
-def openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, client):
-    """Gera um texto curto para a criação de imagens com base no resumo."""
-    nome_texto_imagem = f"texto_para_geracao_imagem_{nome_arquivo}.txt"
+def openai_dalle_gerar_imagem(resumo_para_imagem, nome_arquivo, client, quantidade):
+    """Gera imagens com base no texto, caso ainda não existam."""
+    caminhos_imagens = [os.path.join(PASTAS["imagens"], f"{nome_arquivo}_{i}.png") for i in range(quantidade)]
 
-    texto_existente = ferramenta_ler_arquivo(nome_texto_imagem)
-    if texto_existente:
-        print("Arquivo de texto para imagem encontrado. Pulando a geração...")
-        return texto_existente
+    if all(os.path.exists(img) for img in caminhos_imagens):
+        print("Imagens já existem. Pulando geração...")
+        return caminhos_imagens
 
-    print("Gerando a saída de texto para criação de imagens com o GPT ...")
+    print("Gerando imagens com DALL-E...")
+    prompt_user = f"Uma pintura futurista e misteriosa, textless, 3D que retrate: {resumo_para_imagem}."
 
-    prompt_sistema = """
-    - A saída deve ser uma única frase do tamanho de um tweet, que descreva o conteúdo do texto de forma impactante para ser transcrita como uma imagem.
-    - Não inclua hashtags.
-    """
-
-    prompt_usuario = f'Reescreva o texto a seguir como uma frase curta e chamativa para um post de imagem: "{resumo_instagram}"'
-
-    resposta = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": prompt_sistema},
-            {"role": "user", "content": prompt_usuario}
-        ],
-        temperature=0.6
-    )
-
-    texto_para_imagem = resposta.choices[0].message.content.strip()
-
-    with open(nome_texto_imagem, "w", encoding='utf-8') as arquivo_texto:
-        arquivo_texto.write(texto_para_imagem)
-
-    return texto_para_imagem
-
-def openai_dalle_gerar_imagem(resolucao, resumo_para_imagem, nome_arquivo, client, quantidade=1):
-    """Gera uma imagem com base no texto fornecido."""
-    print("Gerando imagem com o DALL-E...")
-
-    prompt_user = "Uma pintura ultra futurista, textless, de um cenário tecnológico com elementos de computação e tecnologia. A imagem deve ser quadrada e ter uma resolução de 1024x1024." + resumo_para_imagem
-    
-    resposta = client.images.generate(
+    imagens_geradas = [client.images.generate(
         model="dall-e-3",
         prompt=prompt_user,
-        n=quantidade,
-        size=resolucao
-    )
+        n=1,
+        size="1024x1024"
+    ).data[0].url for _ in range(quantidade)]
 
-    # Corrigindo o acesso ao atributo correto
-    url_imagem = resposta.data[0].url
-    print(f"Imagem gerada! URL: {url_imagem}")
+    for i, url in enumerate(imagens_geradas):
+        imagem = requests.get(url)
+        with open(caminhos_imagens[i], "wb") as arquivo:
+            arquivo.write(imagem.content)
 
-    return url_imagem
+    return caminhos_imagens
 
 def main():
-    """Executa todo o fluxo de transcrição, resumo e geração de texto para imagens."""
+    """Executa todo o fluxo de transcrição, resumo e geração de imagem."""
     load_dotenv()
-    
     caminho_audio = "podcasts/hipsters_154_testes_short.mp3"
     nome_arquivo = "hipsters_154_testes_short"
-    resolucao = "1024x1024"
-    
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
-    
-    modelo_whisper = "whisper-1"
-    
-    transcricao_completa = openai_whisper_transcrever(caminho_audio, nome_arquivo, modelo_whisper, client)
-    resumo_instagram = openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client)
-    texto_para_imagem = openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, client)
-    resumo_imagem_instagram = ferramenta_ler_arquivo(f"texto_para_geracao_imagem_{nome_arquivo}.txt")
 
-    imagem_gerada = openai_dalle_gerar_imagem(resolucao,resumo_imagem_instagram,nome_arquivo,client)
+    transcricao = openai_whisper_transcrever(caminho_audio, nome_arquivo, "whisper-1", client)
+    resumo = openai_gpt_resumir_texto(transcricao, nome_arquivo, client)
+    openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 4)
+
 if __name__ == "__main__":
     main()
