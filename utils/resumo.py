@@ -25,9 +25,12 @@ def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
     prompt_sistema = """
     Assuma que você é um digital influencer criando conteúdos.
     - Seja criativo e autêntico.
-    - Use linguagem informal.
+    - Use linguagem formal.
     - Faça um resumo envolvente com no máximo 1000 caracteres.
     - Inclua hashtags relevantes.
+    - Inclua emogis para chamar atenção.
+    - Não copie e cole o texto original.
+    - Não faça chamada de podcast.
     """
 
     resposta = client.chat.completions.create(
