@@ -71,6 +71,7 @@ def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
     - Seja criativo e autêntico
     - Escreva como se fosse uma matéria de jornal ou revista
     - Escreva as hashtags que você usaria
+    - Use no maximo 300 palavras ou caracteres
     """
     prompt_usuario = f'Reescreva como um texto de materia: "{transcricao_completa}".'
 
@@ -99,10 +100,10 @@ def openai_dalle_gerar_imagem(resumo_para_imagem, nome_arquivo, client, quantida
     prompt_user = f"Uma pintura futurista e misteriosa, sem texto, 3D que retrate: {resumo_para_imagem}."
 
     imagens_geradas = [client.images.generate(
-        model="dall-e-2",
+        model="dall-e-3",
         prompt=prompt_user,
         n=1,
-        size="256x256"
+        size="1024x1024"
     ).data[0].url for _ in range(quantidade)]
 
     for i, url in enumerate(imagens_geradas):
@@ -144,7 +145,6 @@ def confirmacao_postagem(caminho_imagem_convertida, Legenda_postagem):
     print("\n\nDeseja postar os dados acima no seu instagram? Digite 's' para sim e 'n' para não.")
     return input()
 
-
 def ferramenta_conversao_binario_para_string(texto):
     if isinstance(texto, bytes):
         return str(texto.decode())
@@ -162,7 +162,6 @@ def main():
 
     transcricao = openai_whisper_transcrever(caminho_audio, nome_arquivo, "whisper-1", client)
     resumo = openai_gpt_resumir_texto(transcricao, nome_arquivo, client)
-    # openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
     lista_imagens_geradas = openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
 
     caminho_imagem_escolhida = selecionar_imagem(lista_imagens_geradas)
@@ -174,5 +173,6 @@ def main():
     if confirmacao_postagem(caminho_imagem_convertida,ferramenta_conversao_binario_para_string(resumo)).lower() == "s":
         print("Postando no Instagram...")
         postar_instagram(caminho_imagem_convertida, f"{ferramenta_conversao_binario_para_string(resumo)}", usuario_instagram, senha_instagram)
+
 if __name__ == "__main__":
     main()
