@@ -3,3 +3,10 @@ python-dotenv
 requests
 Pillow
 instabot
+googlesearch-python
+beautifulsoup4
+newspaper3k
+gTTS
+pydub
+pyttsx3
+lxml[html_clean]
