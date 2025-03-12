@@ -1,6 +1,8 @@
 import os
+import base64
 from openai import OpenAI
 from dotenv import load_dotenv
+import random
 from utils.transcricao import openai_whisper_transcrever
 from utils.resumo import openai_gpt_resumir_texto
 from utils.gerar_imagem import openai_dalle_gerar_imagem, selecionar_imagem, ferramenta_converter_png_para_jpg
@@ -19,10 +21,40 @@ def obter_caminho_arquivo(nome_arquivo):
         print(f"❌ Nenhum arquivo encontrado para {nome_arquivo}.")
         return None, None
 
+def gerar_audio_ia(texto, nome_arquivo, client):
+    """Gera um áudio do texto usando a IA da OpenAI."""
+    print("🎙️ Gerando áudio do resumo...")
+    
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-audio-preview",
+            modalities=["text", "audio"],
+            audio={"voice": "alloy", "format": "wav"},
+            messages=[{"role": "user", "content": texto}]
+        )
+
+        # Decodificar o áudio gerado
+        wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
+
+        # Criar pasta para armazenar os áudios
+        pasta_audios = "audios"
+        os.makedirs(pasta_audios, exist_ok=True)
+
+        caminho_audio = os.path.join(pasta_audios, f"{nome_arquivo}.wav")
+
+        with open(caminho_audio, "wb") as f:
+            f.write(wav_bytes)
+
+        print(f"✅ Áudio gerado e salvo em: {caminho_audio}")
+        return caminho_audio
+    except Exception as e:
+        print(f"❌ Erro ao gerar áudio: {e}")
+        return None
+
 def main():
-    """Executa o fluxo de transcrição, resumo e geração de imagem."""
+    """Executa o fluxo de transcrição, resumo, leitura em voz e geração de imagem."""
     load_dotenv()
-    nome_arquivo = "noticia_31_Congresso_dos_EUA_e_OVNIs:_o_que_foi_revelado_na_segunda_audiência_sobre_UFOs"
+    nome_arquivo = "noticia_31_Congresso_dos_EUA_e_OVNIs:_o_que_foi_revelado_na_segunda_audiência_sobre_UFOs_resumo"
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
     usuario_instagram = os.getenv("USER_INSTAGRAM")
@@ -54,17 +86,39 @@ def main():
 
     print(f"✅ Resumo salvo em: {caminho_resumo}")
 
-    # Gera imagem
-    lista_imagens_geradas = openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
-    caminho_imagem_escolhida = selecionar_imagem(lista_imagens_geradas)
-    caminho_imagem_convertida = ferramenta_converter_png_para_jpg(caminho_imagem_escolhida, nome_arquivo)
+    # Pergunta ao usuário se deseja gerar um áudio do resumo
+    gerar_audio = input("🎙️ Deseja gerar um áudio para este resumo? (s/n): ").strip().lower()
+    if gerar_audio == "s":
+        caminho_audio = gerar_audio_ia(nome_arquivo, nome_arquivo, client)
+    else:
+        print("🔇 Áudio não gerado.")
 
-    print(f"🖼️ Imagem pronta: {caminho_imagem_convertida}")
+    # Pergunta ao usuário se deseja criar uma nova imagem
+    gerar_imagem = input("🖼️ Deseja gerar uma nova imagem para esta notícia? (s/n): ").strip().lower()
 
-    # Confirma e posta no Instagram
-    if confirmacao_postagem(caminho_imagem_convertida, ferramenta_conversao_binario_para_string(resumo)).lower() == "s":
+    if gerar_imagem == "s":
+        lista_imagens_geradas = openai_dalle_gerar_imagem(resumo, nome_arquivo, client, 1)
+        caminho_imagem_escolhida = selecionar_imagem(lista_imagens_geradas)
+        caminho_imagem_convertida = ferramenta_converter_png_para_jpg(caminho_imagem_escolhida, nome_arquivo)
+        print(f"🖼️ Imagem gerada e pronta: {caminho_imagem_convertida}")
+
+    else:
+        print("🔍 Procurando uma imagem existente na pasta 'imagens/'...")
+        imagem_existente = buscar_imagem_existente()
+
+        if imagem_existente:
+            caminho_imagem_convertida = ferramenta_converter_png_para_jpg(imagem_existente, nome_arquivo)
+            print(f"🖼️ Imagem convertida para JPG: {caminho_imagem_convertida}")
+        else:
+            print("❌ Nenhuma imagem encontrada na pasta 'imagens/'. Finalizando o processo.")
+            return  # Sai do programa se não houver imagem
+
+    # Confirma e posta no Instagram, se houver imagem gerada ou convertida
+    if caminho_imagem_convertida and confirmacao_postagem(caminho_imagem_convertida, ferramenta_conversao_binario_para_string(resumo)).lower() == "s":
         print("🚀 Postando no Instagram...")
         postar_instagram(caminho_imagem_convertida, ferramenta_conversao_binario_para_string(resumo), usuario_instagram, senha_instagram)
+    else:
+        print("✅ Processo finalizado sem postagem no Instagram.")
 
 if __name__ == "__main__":
     main()
