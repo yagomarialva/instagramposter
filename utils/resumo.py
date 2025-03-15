@@ -31,6 +31,7 @@ def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, client):
     - Inclua emogis para chamar atenção.
     - Não copie e cole o texto original.
     - Não faça chamada de podcast.
+    - Escreva a url da noticia
     """
 
     resposta = client.chat.completions.create(

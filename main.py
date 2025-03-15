@@ -22,7 +22,7 @@ def obter_caminho_arquivo(nome_arquivo):
 def main():
     """Executa o fluxo de transcrição, resumo e geração de imagem."""
     load_dotenv()
-    nome_arquivo = "noticia_31_Congresso_dos_EUA_e_OVNIs:_o_que_foi_revelado_na_segunda_audiência_sobre_UFOs"
+    nome_arquivo = "noticia_2_Shub-Niggurath"
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
     usuario_instagram = os.getenv("USER_INSTAGRAM")

@@ -1,30 +1,30 @@
 import os
 import time
+import base64
 import requests
+from openai import OpenAI
+from dotenv import load_dotenv
 from googlesearch import search
 from bs4 import BeautifulSoup
 from newspaper import Article
-from datetime import datetime
-from gtts import gTTS
-from pydub import AudioSegment
-from io import BytesIO
-import pyttsx3
 
 def criar_pasta(pasta):
-    """Cria a pasta se ela não existir, agora com caminho absoluto ou relativo."""
+    """Cria a pasta se ela não existir."""
     if not os.path.exists(pasta):
         os.makedirs(pasta)
 
-def buscar_noticias(termo, num_resultados=50):
-    """Busca links de notícias relevantes no Google."""
-    print(f"🔍 Buscando notícias sobre: {termo}...")
-    query = f"{termo} notícia"
-    resultados = search(query, num_results=num_resultados, lang="pt")
+def buscar_noticias(termo, num_resultados=3):
+    """Busca links relevantes no Google (não apenas notícias)."""
+    print(f"🔍 Buscando no Google sobre: {termo}...")
     
-    # Filtrando apenas links que realmente são artigos de notícias
-    links_filtrados = [url for url in resultados if "news.google.com" not in url and "/search?" not in url]
-    
-    return links_filtrados[:num_resultados]
+    # Remove o filtro 'notícia' para buscar em todo o Google
+    resultados = search(termo, num_results=num_resultados, lang="pt")
+
+    # Filtra links duplicados e irrelevantes
+    links_filtrados = set(resultados)  # Remove duplicatas automaticamente
+
+    print(f"✅ {len(links_filtrados)} resultados encontrados.")
+    return list(links_filtrados)[:num_resultados]
 
 def extrair_noticia(url):
     """Extrai título, data e conteúdo completo da notícia."""
@@ -49,25 +49,25 @@ def extrair_noticia(url):
 
 def salvar_em_txt_individual(termo, noticias):
     """Salva cada notícia em um arquivo de texto individual em uma pasta fora do diretório atual."""
-    pasta = "../noticias"  # Caminho absoluto ou relativo fora da pasta do script
+    pasta = "../noticias"
     criar_pasta(pasta)
-    
+
     intro = "Bem-vindo ao podcast de ufologia. Aqui estão as notícias mais recentes sobre fenômenos ufológicos!"
-    
+
     for idx, noticia in enumerate(noticias, 1):
-        # Verifica se a notícia tem pelo menos 500 palavras
+        # Verifica se a notícia tem pelo menos 200 palavras
         conteudo_noticia = noticia['conteudo']
         num_palavras = len(conteudo_noticia.split())
-        
+
         if num_palavras >= 200:
-            # Nome do arquivo baseado no título da notícia (removendo caracteres especiais)
+            # Nome do arquivo baseado no título da notícia
             nome_arquivo = f"noticia_{idx}_{noticia['titulo'].replace(' ', '_').replace('/', '-')}.txt"
             caminho_arquivo = os.path.join(pasta, nome_arquivo)
 
             with open(caminho_arquivo, "w", encoding="utf-8") as file:
                 file.write(f"📰 Notícia sobre: {termo}\n")
                 file.write("=" * 80 + "\n\n")
-                file.write(f"{intro}\n\n") 
+                file.write(f"{intro}\n\n")
                 file.write(f"{noticia['titulo']}\n")
                 file.write(f"📅 Data: {noticia['data']}\n")
                 file.write(f"🔗 Link: {noticia['url']}\n\n")
@@ -79,45 +79,57 @@ def salvar_em_txt_individual(termo, noticias):
         else:
             print(f"⚠️ A notícia '{noticia['titulo']}' não tem 200 palavras e foi ignorada.")
 
-def gerar_podcast(texto, nome_arquivo):
-    """Converte o texto em fala e salva como arquivo MP3 em um diretório fora do script."""
-    pasta = "../podcasts"  # Caminho absoluto ou relativo fora da pasta do script
+def gerar_podcast_openai(texto, nome_arquivo, client):
+    """Converte o texto em fala usando OpenAI e salva como arquivo WAV."""
+    pasta = "../podcasts"
     criar_pasta(pasta)
-    nome_arquivo_podcast = os.path.join(pasta, nome_arquivo)
 
     try:
-        tts = gTTS(text=texto, lang='pt')
-        
-        tts.save('temp_audio.mp3')        
-        audio = AudioSegment.from_mp3('temp_audio.mp3')        
-        audio.export(nome_arquivo_podcast, format="mp3")
-        
-        print(f"🎧 Podcast salvo como: {nome_arquivo_podcast}")
+        print("🎙️ Gerando podcast com a IA da OpenAI...")
+
+        completion = client.chat.completions.create(
+            model="gpt-4o-audio-preview",
+            modalities=["text", "audio"],
+            audio={"voice": "echo", "format": "wav"},
+            messages=[{"role": "user", "content": texto}]
+        )
+
+        # Decodifica o áudio gerado
+        wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
+
+        # Caminho para salvar o podcast
+        nome_arquivo_podcast = os.path.join(pasta, f"{nome_arquivo}.wav")
+
+        with open(nome_arquivo_podcast, "wb") as f:
+            f.write(wav_bytes)
+
+        print(f"✅ Podcast gerado e salvo em: {nome_arquivo_podcast}")
     except Exception as e:
-        print(f"⚠️ Erro ao gerar o podcast: {e}")
+        print(f"❌ Erro ao gerar o podcast: {e}")
 
+def gerar_podcast_para_noticias(noticias, client):
+    """Gera podcasts para todas as notícias usando a IA da OpenAI."""
+    print("\n🎙️ Gerando podcasts com IA para as notícias...")
 
-def gerar_podcast_para_noticias(noticias):
-    print("\n🎙️ Gerando podcasts para as notícias...")
-    """Gera podcasts para todas as notícias extraídas."""
-    
     intro = "Bem-vindo ao podcast de ufologia. Aqui estão as notícias mais recentes sobre fenômenos ufológicos!\n\n"
-    
+
     for idx, noticia in enumerate(noticias, 1):
         titulo = noticia['titulo']
         conteudo = noticia['conteudo']
-        
-        texto_podcast = f"{intro}{titulo}\n\n{conteudo}"
-        
-        nome_arquivo_podcast = f"podcast_noticia_{idx}_{titulo}.mp3"
-        
-        gerar_podcast(texto_podcast, nome_arquivo_podcast)
 
+        texto_podcast = f"{intro}{titulo}\n\n{conteudo}"
+        nome_arquivo_podcast = f"podcast_noticia_{idx}_{titulo.replace(' ', '_').replace('/', '-')}"
+        
+        gerar_podcast_openai(texto_podcast, nome_arquivo_podcast, client)
 
 if __name__ == "__main__":
+    load_dotenv()
+    api_openai = os.getenv("API_KEY_OPENAI")
+    client = OpenAI(api_key=api_openai)
+
     termo_pesquisa = input("Digite o termo para buscar notícias: ")
     links_noticias = buscar_noticias(termo_pesquisa)
-    
+
     noticias_extraidas = []
     for link in links_noticias:
         print(f"📄 Extraindo: {link}")
@@ -126,5 +138,6 @@ if __name__ == "__main__":
             noticias_extraidas.append(noticia)
 
     salvar_em_txt_individual(termo_pesquisa, noticias_extraidas)
-    
-    gerar_podcast_para_noticias(noticias_extraidas)
+
+    # Gera podcasts com OpenAI
+    gerar_podcast_para_noticias(noticias_extraidas, client)
