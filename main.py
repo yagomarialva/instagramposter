@@ -54,7 +54,7 @@ def gerar_audio_ia(texto, nome_arquivo, client):
 def main():
     """Executa o fluxo de transcrição, resumo, leitura em voz e geração de imagem."""
     load_dotenv()
-    nome_arquivo = "noticia_31_Congresso_dos_EUA_e_OVNIs:_o_que_foi_revelado_na_segunda_audiência_sobre_UFOs_resumo"
+    nome_arquivo = "noticias/noticia_brasil_1_PT_e_PSOL_se_unem_a_bolsonaristas_na_Alerj_e_Câmara_do_Rio_de_Janeiro"
     api_openai = os.getenv("API_KEY_OPENAI")
     client = OpenAI(api_key=api_openai)
     usuario_instagram = os.getenv("USER_INSTAGRAM")

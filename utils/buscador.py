@@ -101,7 +101,7 @@ def salvar_em_txt_individual(noticias):
             print(f"⚠️ A notícia '{noticia['titulo']}' não tem 200 palavras e foi ignorada.")
 
 if __name__ == "__main__":
-    num_noticias = 20  
+    num_noticias =10  
     max_paginas = 5 
 
     links_noticias = buscar_noticias(num_resultados=num_noticias, max_paginas=max_paginas)
